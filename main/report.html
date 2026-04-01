@@ -1,0 +1,400 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>staticserve: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/linkdata/staticserve/handle.go (100.0%)</option>
+				
+				<option value="file1">github.com/linkdata/staticserve/newfs.go (100.0%)</option>
+				
+				<option value="file2">github.com/linkdata/staticserve/normalize.go (100.0%)</option>
+				
+				<option value="file3">github.com/linkdata/staticserve/servehttp.go (100.0%)</option>
+				
+				<option value="file4">github.com/linkdata/staticserve/staticserve.go (100.0%)</option>
+				
+				<option value="file5">github.com/linkdata/staticserve/walkdir.go (100.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package staticserve
+
+import (
+        "errors"
+        "io"
+        "io/fs"
+        "net/http"
+        "path"
+)
+
+// HandleFunc matches the signature of http.ServeMux.Handle().
+//
+// Handle and HandleFS pass method-aware patterns. Bare path patterns are normalized to GET.
+type HandleFunc = func(uri string, handler http.Handler)
+
+// Handle creates a new StaticServe for the fpath that returns the data given.
+// Returns the URI of the resource.
+func Handle(fpath string, data []byte, handleFn HandleFunc) (uri string, err error) <span class="cov8" title="1">{
+        var ss *StaticServe
+        if ss, err = New(fpath, data); err == nil </span><span class="cov8" title="1">{
+                uri = EnsurePrefixSlash(ss.Name)
+                handleFn(NormalizeGET(uri), ss)
+        }</span>
+        <span class="cov8" title="1">return</span>
+}
+
+// HandleFS creates StaticServe handlers for the filepaths given.
+// Returns the URI(s) of the resources. If an error occurs, the URI
+// of the failed resource will be the empty string.
+func HandleFS(fsys fs.FS, handleFn HandleFunc, root string, filepaths ...string) (uris []string, err error) <span class="cov8" title="1">{
+        for _, filepath := range filepaths </span><span class="cov8" title="1">{
+                var uri string
+                f, ferr := fsys.Open(path.Join(root, filepath))
+                if ferr == nil </span><span class="cov8" title="1">{
+                        var b []byte
+                        if b, ferr = io.ReadAll(f); ferr == nil </span><span class="cov8" title="1">{
+                                uri, ferr = Handle(filepath, b, handleFn)
+                        }</span>
+                        <span class="cov8" title="1">ferr = errors.Join(ferr, f.Close())</span>
+                }
+                <span class="cov8" title="1">uris = append(uris, uri)
+                err = errors.Join(err, ferr)</span>
+        }
+        <span class="cov8" title="1">return</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package staticserve
+
+import (
+        "io"
+        "io/fs"
+        "path"
+)
+
+// NewFS reads the file at fpath from fsys and then calls New.
+func NewFS(fsys fs.FS, root, fpath string) (ss *StaticServe, err error) <span class="cov8" title="1">{
+        var f fs.File
+        if f, err = fsys.Open(path.Join(root, fpath)); err == nil </span><span class="cov8" title="1">{
+                defer f.Close()
+                var b []byte
+                if b, err = io.ReadAll(f); err == nil </span><span class="cov8" title="1">{
+                        ss, err = New(fpath, b)
+                }</span>
+        }
+        <span class="cov8" title="1">return</span>
+}
+
+func MustNewFS(fsys fs.FS, root string, fpaths ...string) (ssl []*StaticServe) <span class="cov8" title="1">{
+        for _, fpath := range fpaths </span><span class="cov8" title="1">{
+                ss, err := NewFS(fsys, root, fpath)
+                MaybePanic(err)
+                ssl = append(ssl, ss)
+        }</span>
+        <span class="cov8" title="1">return</span>
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package staticserve
+
+import (
+        "net/http"
+        "strings"
+)
+
+func isMethodChar(c byte) bool <span class="cov8" title="1">{
+        if c &gt;= 'A' &amp;&amp; c &lt;= 'Z' </span><span class="cov8" title="1">{
+                return true
+        }</span>
+        <span class="cov8" title="1">if c &gt;= '0' &amp;&amp; c &lt;= '9' </span><span class="cov8" title="1">{
+                return true
+        }</span>
+        <span class="cov8" title="1">switch c </span>{
+        case '!', '#', '$', '%', '&amp;', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~':<span class="cov8" title="1">
+                return true</span>
+        }
+        <span class="cov8" title="1">return false</span>
+}
+
+func hasMethodPrefix(pattern string) bool <span class="cov8" title="1">{
+        if i := strings.IndexAny(pattern, " \t"); i &gt; 0 </span><span class="cov8" title="1">{
+                method := pattern[:i]
+                for _, c := range []byte(method) </span><span class="cov8" title="1">{
+                        if !isMethodChar(c) </span><span class="cov8" title="1">{
+                                return false
+                        }</span>
+                }
+                <span class="cov8" title="1">return true</span>
+        }
+        <span class="cov8" title="1">return false</span>
+}
+
+// EnsurePrefixSlash returns s with a leading slash.
+func EnsurePrefixSlash(s string) string <span class="cov8" title="1">{
+        if !strings.HasPrefix(s, "/") </span><span class="cov8" title="1">{
+                s = "/" + s
+        }</span>
+        <span class="cov8" title="1">return s</span>
+}
+
+// NormalizeGET returns a method-aware ServeMux pattern.
+//
+// If pattern already has a method prefix, it is returned unchanged.
+// Otherwise GET is prepended and the path is made absolute.
+func NormalizeGET(pattern string) string <span class="cov8" title="1">{
+        pattern = strings.TrimSpace(pattern)
+        if hasMethodPrefix(pattern) </span><span class="cov8" title="1">{
+                return pattern
+        }</span>
+        <span class="cov8" title="1">return http.MethodGet + " " + EnsurePrefixSlash(pattern)</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package staticserve
+
+import (
+        "bytes"
+        "compress/gzip"
+        "io"
+        "net/http"
+        "strconv"
+        "strings"
+)
+
+var HeaderCacheControl = []string{"public, max-age=31536000, s-maxage=31536000, immutable"}
+var HeaderVary = []string{"Accept-Encoding"}
+var headerContentEncoding = []string{"gzip"}
+
+func acceptsGzip(hdr http.Header) bool <span class="cov8" title="1">{
+        for _, s := range hdr["Accept-Encoding"] </span><span class="cov8" title="1">{
+                if strings.Contains(s, "gzip") </span><span class="cov8" title="1">{
+                        return true
+                }</span>
+        }
+        <span class="cov8" title="1">return false</span>
+}
+
+func (ss *StaticServe) ServeHTTP(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        var body io.Reader
+        statusCode := http.StatusMethodNotAllowed
+        if r.Method == http.MethodGet </span><span class="cov8" title="1">{
+                hdr := w.Header()
+                if acceptsGzip(r.Header) </span><span class="cov8" title="1">{
+                        body = bytes.NewReader(ss.Gz)
+                        hdr["Content-Encoding"] = headerContentEncoding
+                        hdr["Content-Length"] = []string{strconv.Itoa(len(ss.Gz))}
+                }</span> else<span class="cov8" title="1"> {
+                        statusCode = http.StatusInternalServerError
+                        if gzr, err := gzip.NewReader(bytes.NewReader(ss.Gz)); err == nil </span><span class="cov8" title="1">{
+                                defer gzr.Close()
+                                body = gzr
+                        }</span>
+                }
+                <span class="cov8" title="1">if body != nil </span><span class="cov8" title="1">{
+                        statusCode = http.StatusOK
+                        hdr["Cache-Control"] = HeaderCacheControl
+                        hdr["Vary"] = HeaderVary
+                        if ss.ContentType != "" </span><span class="cov8" title="1">{
+                                hdr["Content-Type"] = []string{ss.ContentType}
+                        }</span>
+                }
+        }
+        <span class="cov8" title="1">w.WriteHeader(statusCode)
+        if body != nil </span><span class="cov8" title="1">{
+                _, _ = io.Copy(w, body)
+        }</span>
+}
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package staticserve
+
+import (
+        "bytes"
+        "compress/gzip"
+        "hash/fnv"
+        "mime"
+        "path/filepath"
+        "strconv"
+        "strings"
+)
+
+type StaticServe struct {
+        Name        string // the cache-busting file name, e.g. "static/filename.1234567.js"
+        ContentType string // Content-Type of the file, e.g. "application/javascript"
+        Gz          []byte // gzipped data, will be unpacked as needed
+}
+
+// New returns a StaticServe that serves the given data with a filename like 'filename.12345678.ext'.
+// The filename must have the suffix ".gz" if the data is GZip compressed. The ".gz" suffix will
+// not be part of the filename presented in this case.
+func New(filename string, data []byte) (ss *StaticServe, err error) <span class="cov8" title="1">{
+        var gz []byte
+        if strings.HasSuffix(filename, ".gz") </span><span class="cov8" title="1">{
+                gz = data
+                filename = strings.TrimSuffix(filename, ".gz")
+        }</span> else<span class="cov8" title="1"> {
+                var buf bytes.Buffer
+                gzw := gzip.NewWriter(&amp;buf)
+                defer gzw.Close()
+                if _, err = gzw.Write(data); err == nil </span><span class="cov8" title="1">{
+                        if err = gzw.Flush(); err == nil </span><span class="cov8" title="1">{
+                                gz = buf.Bytes()
+                        }</span>
+                }
+        }
+
+        <span class="cov8" title="1">if err == nil </span><span class="cov8" title="1">{
+                ext := filepath.Ext(filename)
+                filename = strings.TrimSuffix(filename, ext)
+                h := fnv.New64a()
+                if _, err = h.Write(gz); err == nil </span><span class="cov8" title="1">{
+                        ss = &amp;StaticServe{
+                                Name:        filename + "." + strconv.FormatUint(h.Sum64(), 36) + ext,
+                                ContentType: mime.TypeByExtension(ext),
+                                Gz:          gz,
+                        }
+                }</span>
+        }
+
+        <span class="cov8" title="1">return</span>
+}
+
+func MaybePanic(err error) <span class="cov8" title="1">{
+        if err != nil </span><span class="cov8" title="1">{
+                panic(err)</span>
+        }
+}
+
+// Must calls New and panics on error.
+func Must(filename string, data []byte) (ss *StaticServe) <span class="cov8" title="1">{
+        var err error
+        ss, err = New(filename, data)
+        MaybePanic(err)
+        return
+}</span>
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package staticserve
+
+import (
+        "io"
+        "io/fs"
+        "strings"
+)
+
+// WalkDir walks the file tree rooted at root, calling fn for each file in the tree with
+// the filename having root trimmed (e.g. "root/dir/file.ext" becomes "dir/file.ext").
+func WalkDir(fsys fs.FS, root string, fn func(filename string, ss *StaticServe) (err error)) (err error) <span class="cov8" title="1">{
+        err = fs.WalkDir(fsys, root, func(filename string, d fs.DirEntry, err error) error </span><span class="cov8" title="1">{
+                if err == nil &amp;&amp; !d.IsDir() </span><span class="cov8" title="1">{
+                        var f fs.File
+                        if f, err = fsys.Open(filename); err == nil </span><span class="cov8" title="1">{
+                                defer f.Close()
+                                var b []byte
+                                if b, err = io.ReadAll(f); err == nil </span><span class="cov8" title="1">{
+                                        var ss *StaticServe
+                                        filename = strings.TrimPrefix(strings.TrimPrefix(filename, root), "/")
+                                        if ss, err = New(filename, b); err == nil </span><span class="cov8" title="1">{
+                                                err = fn(filename, ss)
+                                        }</span>
+                                }
+                        }
+                }
+                <span class="cov8" title="1">return err</span>
+        })
+        <span class="cov8" title="1">return</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
