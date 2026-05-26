@@ -53,6 +53,33 @@ func Test_New(t *testing.T) {
 	}
 }
 
+func Test_New_PopulatesSize(t *testing.T) {
+	data := []byte(someJavascript)
+	ss, err := staticserve.New("test.js", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ss.Size != int64(len(data)) {
+		t.Fatalf("plain input: expected size %d, got %d", len(data), ss.Size)
+	}
+
+	ssGz, err := staticserve.New("test.js.gz", ss.Gz)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ssGz.Size != int64(len(data)) {
+		t.Fatalf(".gz input: expected size %d, got %d", len(data), ssGz.Size)
+	}
+
+	ssEmpty, err := staticserve.New("empty.txt", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ssEmpty.Size != 0 {
+		t.Fatalf("nil data: expected size 0, got %d", ssEmpty.Size)
+	}
+}
+
 func Test_New_GZipIsComplete(t *testing.T) {
 	data := []byte(someJavascript)
 	ss, err := staticserve.New("test.js", data)
