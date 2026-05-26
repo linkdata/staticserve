@@ -12,6 +12,7 @@ import (
 
 var HeaderCacheControl = []string{"public, max-age=31536000, s-maxage=31536000, immutable"}
 var HeaderVary = []string{"Accept-Encoding"}
+var HeaderAllow = []string{http.MethodGet + ", " + http.MethodHead}
 var headerContentEncoding = []string{"gzip"}
 
 func acceptsGzip(hdr http.Header) bool {
@@ -57,6 +58,8 @@ func (ss *StaticServe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				hdr["Content-Type"] = []string{ss.ContentType}
 			}
 		}
+	} else {
+		w.Header()["Allow"] = HeaderAllow
 	}
 	w.WriteHeader(statusCode)
 	if body != nil && r.Method != http.MethodHead {

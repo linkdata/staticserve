@@ -205,6 +205,9 @@ func Test_ServeHTTP_Errors(t *testing.T) {
 	if sc := rr.Result().StatusCode; sc != http.StatusMethodNotAllowed {
 		t.Error(sc)
 	}
+	if allow := rr.Result().Header.Get("Allow"); allow != "GET, HEAD" {
+		t.Errorf("expected Allow %q, got %q", "GET, HEAD", allow)
+	}
 
 	rq = httptest.NewRequest(http.MethodGet, "/", nil)
 	rr = httptest.NewRecorder()
