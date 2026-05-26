@@ -38,7 +38,7 @@ func New(filename string, data []byte) (ss *StaticServe, err error) {
 		filename = strings.TrimSuffix(filename, ".gz")
 		var gzr *gzip.Reader
 		if gzr, err = gzip.NewReader(bytes.NewReader(gz)); err == nil {
-			size, err = io.Copy(io.Discard, gzr)
+			size, err = io.Copy(io.Discard, gzr) // #nosec G110
 			err = errors.Join(err, gzr.Close())
 		}
 	} else {
