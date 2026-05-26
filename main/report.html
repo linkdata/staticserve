@@ -83,10 +83,10 @@
 
 import (
         "errors"
-        "io"
         "io/fs"
         "net/http"
-        "path"
+        "net/url"
+        "strings"
 )
 
 // HandleFunc matches the signature of http.ServeMux.Handle().
@@ -94,14 +94,23 @@ import (
 // Handle and HandleFS pass method-aware patterns. Bare path patterns are normalized to GET.
 type HandleFunc = func(uri string, handler http.Handler)
 
+func escapeURIPath(fpath string) (string, error) <span class="cov8" title="1">{
+        var parts []string
+        for part := range strings.SplitSeq(fpath, "/") </span><span class="cov8" title="1">{
+                parts = append(parts, url.PathEscape(part))
+        }</span>
+        <span class="cov8" title="1">return url.JoinPath("/", parts...)</span>
+}
+
 // Handle creates a new StaticServe for the fpath that returns the data given.
 // Returns the URI of the resource.
 func Handle(fpath string, data []byte, handleFn HandleFunc) (uri string, err error) <span class="cov8" title="1">{
         var ss *StaticServe
         if ss, err = New(fpath, data); err == nil </span><span class="cov8" title="1">{
-                uri = EnsurePrefixSlash(ss.Name)
-                handleFn(NormalizeGET(uri), ss)
-        }</span>
+                if uri, err = escapeURIPath(ss.Name); err == nil </span><span class="cov8" title="1">{
+                        handleFn(NormalizeGET(uri), ss)
+                }</span>
+        }
         <span class="cov8" title="1">return</span>
 }
 
@@ -111,14 +120,10 @@ func Handle(fpath string, data []byte, handleFn HandleFunc) (uri string, err err
 func HandleFS(fsys fs.FS, handleFn HandleFunc, root string, filepaths ...string) (uris []string, err error) <span class="cov8" title="1">{
         for _, filepath := range filepaths </span><span class="cov8" title="1">{
                 var uri string
-                f, ferr := fsys.Open(path.Join(root, filepath))
+                b, ferr := readFSFile(fsys, root, filepath)
                 if ferr == nil </span><span class="cov8" title="1">{
-                        var b []byte
-                        if b, ferr = io.ReadAll(f); ferr == nil </span><span class="cov8" title="1">{
-                                uri, ferr = Handle(filepath, b, handleFn)
-                        }</span>
-                        <span class="cov8" title="1">ferr = errors.Join(ferr, f.Close())</span>
-                }
+                        uri, ferr = Handle(filepath, b, handleFn)
+                }</span>
                 <span class="cov8" title="1">uris = append(uris, uri)
                 err = errors.Join(err, ferr)</span>
         }
@@ -129,21 +134,30 @@ func HandleFS(fsys fs.FS, handleFn HandleFunc, root string, filepaths ...string)
 		<pre class="file" id="file1" style="display: none">package staticserve
 
 import (
-        "io"
+        "fmt"
         "io/fs"
-        "path"
 )
+
+func readFSFile(fsys fs.FS, root, fpath string) (b []byte, err error) <span class="cov8" title="1">{
+        if fpath == "." || !fs.ValidPath(fpath) </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("%w: %s", fs.ErrInvalid, fpath)
+        }</span>
+        <span class="cov8" title="1">if root == "" </span><span class="cov8" title="1">{
+                root = "."
+        }</span>
+        <span class="cov8" title="1">var sub fs.FS
+        if sub, err = fs.Sub(fsys, root); err == nil </span><span class="cov8" title="1">{
+                b, err = fs.ReadFile(sub, fpath)
+        }</span>
+        <span class="cov8" title="1">return</span>
+}
 
 // NewFS reads the file at fpath from fsys and then calls New.
 func NewFS(fsys fs.FS, root, fpath string) (ss *StaticServe, err error) <span class="cov8" title="1">{
-        var f fs.File
-        if f, err = fsys.Open(path.Join(root, fpath)); err == nil </span><span class="cov8" title="1">{
-                defer f.Close()
-                var b []byte
-                if b, err = io.ReadAll(f); err == nil </span><span class="cov8" title="1">{
-                        ss, err = New(fpath, b)
-                }</span>
-        }
+        var b []byte
+        if b, err = readFSFile(fsys, root, fpath); err == nil </span><span class="cov8" title="1">{
+                ss, err = New(fpath, b)
+        }</span>
         <span class="cov8" title="1">return</span>
 }
 
@@ -218,6 +232,7 @@ import (
         "bytes"
         "compress/gzip"
         "io"
+        "mime"
         "net/http"
         "strconv"
         "strings"
@@ -228,10 +243,20 @@ var HeaderVary = []string{"Accept-Encoding"}
 var headerContentEncoding = []string{"gzip"}
 
 func acceptsGzip(hdr http.Header) bool <span class="cov8" title="1">{
-        for _, s := range hdr["Accept-Encoding"] </span><span class="cov8" title="1">{
-                if strings.Contains(s, "gzip") </span><span class="cov8" title="1">{
-                        return true
-                }</span>
+        for _, value := range hdr.Values("Accept-Encoding") </span><span class="cov8" title="1">{
+                for encoding := range strings.SplitSeq(value, ",") </span><span class="cov8" title="1">{
+                        coding, params, err := mime.ParseMediaType(encoding)
+                        if err != nil || !strings.EqualFold(coding, "gzip") </span><span class="cov8" title="1">{
+                                continue</span>
+                        }
+                        <span class="cov8" title="1">if q, ok := params["q"]; ok </span><span class="cov8" title="1">{
+                                qvalue, err := strconv.ParseFloat(q, 64)
+                                if err == nil &amp;&amp; qvalue &lt;= 0 </span><span class="cov8" title="1">{
+                                        continue</span>
+                                }
+                        }
+                        <span class="cov8" title="1">return true</span>
+                }
         }
         <span class="cov8" title="1">return false</span>
 }
@@ -239,7 +264,7 @@ func acceptsGzip(hdr http.Header) bool <span class="cov8" title="1">{
 func (ss *StaticServe) ServeHTTP(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
         var body io.Reader
         statusCode := http.StatusMethodNotAllowed
-        if r.Method == http.MethodGet </span><span class="cov8" title="1">{
+        if r.Method == http.MethodGet || r.Method == http.MethodHead </span><span class="cov8" title="1">{
                 hdr := w.Header()
                 if acceptsGzip(r.Header) </span><span class="cov8" title="1">{
                         body = bytes.NewReader(ss.Gz)
@@ -262,7 +287,7 @@ func (ss *StaticServe) ServeHTTP(w http.ResponseWriter, r *http.Request) <span c
                 }
         }
         <span class="cov8" title="1">w.WriteHeader(statusCode)
-        if body != nil </span><span class="cov8" title="1">{
+        if body != nil &amp;&amp; r.Method != http.MethodHead </span><span class="cov8" title="1">{
                 _, _ = io.Copy(w, body)
         }</span>
 }
@@ -273,6 +298,7 @@ func (ss *StaticServe) ServeHTTP(w http.ResponseWriter, r *http.Request) <span c
 import (
         "bytes"
         "compress/gzip"
+        "errors"
         "hash/fnv"
         "mime"
         "path/filepath"
@@ -297,12 +323,10 @@ func New(filename string, data []byte) (ss *StaticServe, err error) <span class=
         }</span> else<span class="cov8" title="1"> {
                 var buf bytes.Buffer
                 gzw := gzip.NewWriter(&amp;buf)
-                defer gzw.Close()
-                if _, err = gzw.Write(data); err == nil </span><span class="cov8" title="1">{
-                        if err = gzw.Flush(); err == nil </span><span class="cov8" title="1">{
-                                gz = buf.Bytes()
-                        }</span>
-                }
+                _, err = gzw.Write(data)
+                if err = errors.Join(err, gzw.Close()); err == nil </span><span class="cov8" title="1">{
+                        gz = buf.Bytes()
+                }</span>
         }
 
         <span class="cov8" title="1">if err == nil </span><span class="cov8" title="1">{
