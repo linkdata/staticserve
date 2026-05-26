@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/linkdata/staticserve"
 )
@@ -121,5 +123,51 @@ func Test_WalkDir(t *testing.T) {
 		if err = res.Body.Close(); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func Test_WalkDir_EmptyRoot(t *testing.T) {
+	fsys := fstest.MapFS{
+		"file.txt": {Data: []byte("hello")},
+	}
+
+	var filenames []string
+	err := staticserve.WalkDir(fsys, "", func(filename string, ss *staticserve.StaticServe) error {
+		filenames = append(filenames, filename)
+		if ss == nil {
+			t.Fatal("nil StaticServe")
+		}
+		if got := readGzip(t, ss.Gz); !bytes.Equal(got, []byte("hello")) {
+			t.Fatalf("expected file contents, got %q", got)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(filenames) != 1 || filenames[0] != "file.txt" {
+		t.Fatalf("expected [file.txt], got %v", filenames)
+	}
+}
+
+func Test_WalkDir_RootDotPreservesTopLevelDotPath(t *testing.T) {
+	fsys := fstest.MapFS{
+		".well-known/acme.txt": {Data: []byte("challenge")},
+	}
+
+	var gotFilename, gotName string
+	err := staticserve.WalkDir(fsys, ".", func(filename string, ss *staticserve.StaticServe) error {
+		gotFilename = filename
+		gotName = ss.Name
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotFilename != ".well-known/acme.txt" {
+		t.Fatalf("expected dot path to be preserved, got %q", gotFilename)
+	}
+	if !strings.HasPrefix(gotName, ".well-known/acme.") || !strings.HasSuffix(gotName, ".txt") {
+		t.Fatalf("expected cache-busted dot path, got %q", gotName)
 	}
 }
