@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"io"
+	"mime"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,8 +15,18 @@ var HeaderVary = []string{"Accept-Encoding"}
 var headerContentEncoding = []string{"gzip"}
 
 func acceptsGzip(hdr http.Header) bool {
-	for _, s := range hdr["Accept-Encoding"] {
-		if strings.Contains(s, "gzip") {
+	for _, value := range hdr.Values("Accept-Encoding") {
+		for encoding := range strings.SplitSeq(value, ",") {
+			coding, params, err := mime.ParseMediaType(encoding)
+			if err != nil || !strings.EqualFold(coding, "gzip") {
+				continue
+			}
+			if q, ok := params["q"]; ok {
+				qvalue, err := strconv.ParseFloat(q, 64)
+				if err == nil && qvalue <= 0 {
+					continue
+				}
+			}
 			return true
 		}
 	}
@@ -25,7 +36,7 @@ func acceptsGzip(hdr http.Header) bool {
 func (ss *StaticServe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var body io.Reader
 	statusCode := http.StatusMethodNotAllowed
-	if r.Method == http.MethodGet {
+	if r.Method == http.MethodGet || r.Method == http.MethodHead {
 		hdr := w.Header()
 		if acceptsGzip(r.Header) {
 			body = bytes.NewReader(ss.Gz)
@@ -48,7 +59,7 @@ func (ss *StaticServe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.WriteHeader(statusCode)
-	if body != nil {
+	if body != nil && r.Method != http.MethodHead {
 		_, _ = io.Copy(w, body)
 	}
 }

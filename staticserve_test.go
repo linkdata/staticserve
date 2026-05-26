@@ -53,6 +53,17 @@ func Test_New(t *testing.T) {
 	}
 }
 
+func Test_New_GZipIsComplete(t *testing.T) {
+	data := []byte(someJavascript)
+	ss, err := staticserve.New("test.js", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := readGzip(t, ss.Gz); !bytes.Equal(got, data) {
+		t.Fatalf("expected %q, got %q", data, got)
+	}
+}
+
 func Test_Must(t *testing.T) {
 	ss := staticserve.Must("test", nil)
 	if ss == nil {

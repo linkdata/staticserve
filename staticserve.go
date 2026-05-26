@@ -3,6 +3,7 @@ package staticserve
 import (
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"hash/fnv"
 	"mime"
 	"path/filepath"
@@ -27,11 +28,9 @@ func New(filename string, data []byte) (ss *StaticServe, err error) {
 	} else {
 		var buf bytes.Buffer
 		gzw := gzip.NewWriter(&buf)
-		defer gzw.Close()
-		if _, err = gzw.Write(data); err == nil {
-			if err = gzw.Flush(); err == nil {
-				gz = buf.Bytes()
-			}
+		_, err = gzw.Write(data)
+		if err = errors.Join(err, gzw.Close()); err == nil {
+			gz = buf.Bytes()
 		}
 	}
 

@@ -2,11 +2,15 @@ package staticserve_test
 
 import (
 	"bytes"
+	"errors"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/linkdata/staticserve"
 )
@@ -21,6 +25,90 @@ func TestHandle_Pattern(t *testing.T) {
 	}
 	if want := "GET " + uri; gotPattern != want {
 		t.Fatalf("expected pattern %q, got %q", want, gotPattern)
+	}
+}
+
+func TestHandle_EscapesSpecialFilenameURI(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Handle panicked: %v", r)
+		}
+	}()
+
+	mux := http.NewServeMux()
+	uri, err := staticserve.Handle("dir/{slug} file#query?percent%.txt", []byte("abc"), mux.Handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, raw := range []string{"{", "}", " ", "#", "?", "%."} {
+		if strings.Contains(uri, raw) {
+			t.Fatalf("expected escaped uri, got %q", uri)
+		}
+	}
+	for _, escaped := range []string{"%7Bslug%7D", "%20", "%23", "%3F", "%25"} {
+		if !strings.Contains(uri, escaped) {
+			t.Fatalf("expected uri %q to contain %q", uri, escaped)
+		}
+	}
+
+	rq := httptest.NewRequest(http.MethodGet, uri, nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, rq)
+	if sc := rr.Result().StatusCode; sc != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, sc)
+	}
+}
+
+func TestHandle_DoesNotRegisterWildcardRoute(t *testing.T) {
+	mux := http.NewServeMux()
+	uri, err := staticserve.Handle("dir/{asset}/file.txt", []byte("abc"), mux.Handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rq := httptest.NewRequest(http.MethodGet, uri, nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, rq)
+	if sc := rr.Result().StatusCode; sc != http.StatusOK {
+		t.Fatalf("literal uri: expected status %d, got %d", http.StatusOK, sc)
+	}
+
+	wildcardCandidate := strings.Replace(uri, "%7Basset%7D", "other", 1)
+	wildcardCandidate = strings.Replace(wildcardCandidate, "{asset}", "other", 1)
+	rq = httptest.NewRequest(http.MethodGet, wildcardCandidate, nil)
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, rq)
+	if sc := rr.Result().StatusCode; sc != http.StatusNotFound {
+		t.Fatalf("wildcard candidate %q: expected status %d, got %d", wildcardCandidate, http.StatusNotFound, sc)
+	}
+}
+
+func TestHandleFS_RejectsRootEscape(t *testing.T) {
+	fsys := fstest.MapFS{
+		"assets/public.txt": {Data: []byte("public")},
+		"secret.txt":        {Data: []byte("secret")},
+	}
+	var handled []string
+	uris, err := staticserve.HandleFS(fsys, func(pattern string, _ http.Handler) {
+		handled = append(handled, pattern)
+	}, "assets", "public.txt", "../secret.txt")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !errors.Is(err, fs.ErrInvalid) {
+		t.Fatalf("expected fs.ErrInvalid, got %v", err)
+	}
+	if len(uris) != 2 {
+		t.Fatalf("expected 2 uris, got %d", len(uris))
+	}
+	if uris[0] == "" {
+		t.Fatal("expected public asset uri")
+	}
+	if uris[1] != "" {
+		t.Fatalf("expected empty uri for invalid path, got %q", uris[1])
+	}
+	if len(handled) != 1 {
+		t.Fatalf("expected one handled route, got %d: %v", len(handled), handled)
 	}
 }
 

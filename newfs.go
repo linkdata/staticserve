@@ -1,20 +1,29 @@
 package staticserve
 
 import (
-	"io"
+	"fmt"
 	"io/fs"
-	"path"
 )
+
+func readFSFile(fsys fs.FS, root, fpath string) (b []byte, err error) {
+	if fpath == "." || !fs.ValidPath(fpath) {
+		return nil, fmt.Errorf("%w: %s", fs.ErrInvalid, fpath)
+	}
+	if root == "" {
+		root = "."
+	}
+	var sub fs.FS
+	if sub, err = fs.Sub(fsys, root); err == nil {
+		b, err = fs.ReadFile(sub, fpath)
+	}
+	return
+}
 
 // NewFS reads the file at fpath from fsys and then calls New.
 func NewFS(fsys fs.FS, root, fpath string) (ss *StaticServe, err error) {
-	var f fs.File
-	if f, err = fsys.Open(path.Join(root, fpath)); err == nil {
-		defer f.Close()
-		var b []byte
-		if b, err = io.ReadAll(f); err == nil {
-			ss, err = New(fpath, b)
-		}
+	var b []byte
+	if b, err = readFSFile(fsys, root, fpath); err == nil {
+		ss, err = New(fpath, b)
 	}
 	return
 }
