@@ -28,6 +28,8 @@ func NewFS(fsys fs.FS, root, fpath string) (ss *StaticServe, err error) {
 	return
 }
 
+// MustNewFS calls [NewFS] for each fpath relative to root and returns the
+// resulting StaticServe values in order. It panics on the first error.
 func MustNewFS(fsys fs.FS, root string, fpaths ...string) (ssl []*StaticServe) {
 	for _, fpath := range fpaths {
 		ss, err := NewFS(fsys, root, fpath)
