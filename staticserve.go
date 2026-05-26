@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"errors"
 	"hash/fnv"
+	"io"
 	"mime"
 	"path/filepath"
 	"strconv"
@@ -23,8 +24,13 @@ type StaticServe struct {
 func New(filename string, data []byte) (ss *StaticServe, err error) {
 	var gz []byte
 	if strings.HasSuffix(filename, ".gz") {
-		gz = data
+		gz = append([]byte(nil), data...)
 		filename = strings.TrimSuffix(filename, ".gz")
+		var gzr *gzip.Reader
+		if gzr, err = gzip.NewReader(bytes.NewReader(gz)); err == nil {
+			_, err = io.Copy(io.Discard, gzr)
+			err = errors.Join(err, gzr.Close())
+		}
 	} else {
 		var buf bytes.Buffer
 		gzw := gzip.NewWriter(&buf)

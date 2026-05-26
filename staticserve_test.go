@@ -64,6 +64,32 @@ func Test_New_GZipIsComplete(t *testing.T) {
 	}
 }
 
+func Test_New_RejectsInvalidGZipInput(t *testing.T) {
+	ss, err := staticserve.New("test.js.gz", []byte("not gzip"))
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if ss != nil {
+		t.Fatalf("expected nil StaticServe, got %#v", ss)
+	}
+}
+
+func Test_New_RejectsTruncatedGZipInput(t *testing.T) {
+	valid, err := staticserve.New("test.js", []byte(someJavascript))
+	if err != nil {
+		t.Fatal(err)
+	}
+	truncated := valid.Gz[:len(valid.Gz)-1]
+
+	ss, err := staticserve.New("test.js.gz", truncated)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if ss != nil {
+		t.Fatalf("expected nil StaticServe, got %#v", ss)
+	}
+}
+
 func Test_Must(t *testing.T) {
 	ss := staticserve.Must("test", nil)
 	if ss == nil {
