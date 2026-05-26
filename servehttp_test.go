@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -80,6 +81,43 @@ func Test_ServeHTTP_GZipBodyIsComplete(t *testing.T) {
 	}
 	if got := readGzip(t, b); !bytes.Equal(got, []byte(someText)) {
 		t.Fatalf("expected %q, got %q", someText, got)
+	}
+}
+
+func Test_ServeHTTP_PlainContentLength(t *testing.T) {
+	data := []byte(someText)
+	ss, err := staticserve.New("test.txt", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, method := range []string{http.MethodGet, http.MethodHead} {
+		t.Run(method, func(t *testing.T) {
+			rq := httptest.NewRequest(method, "/", nil)
+			rr := httptest.NewRecorder()
+			ss.ServeHTTP(rr, rq)
+			res := rr.Result()
+			if sc := res.StatusCode; sc != http.StatusOK {
+				t.Fatalf("expected status %d, got %d", http.StatusOK, sc)
+			}
+			want := strconv.Itoa(len(data))
+			if cl := res.Header.Get("Content-Length"); cl != want {
+				t.Fatalf("expected content-length %q, got %q", want, cl)
+			}
+			b, err := io.ReadAll(res.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = res.Body.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if method == http.MethodGet && !bytes.Equal(b, data) {
+				t.Fatalf("expected body %q, got %q", data, b)
+			}
+			if method == http.MethodHead && len(b) != 0 {
+				t.Fatalf("expected empty HEAD body, got %q", b)
+			}
+		})
 	}
 }
 
