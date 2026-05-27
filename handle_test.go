@@ -83,6 +83,29 @@ func TestHandle_DoesNotRegisterWildcardRoute(t *testing.T) {
 	}
 }
 
+func TestHandle_RejectsInvalidPath(t *testing.T) {
+	for _, fpath := range []string{".", "./file.txt", "dir/../file.txt", "dir//file.txt", "dir/./file.txt", "/file.txt"} {
+		t.Run(fpath, func(t *testing.T) {
+			called := false
+			uri, err := staticserve.Handle(fpath, []byte("abc"), func(string, http.Handler) {
+				called = true
+			})
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if !errors.Is(err, fs.ErrInvalid) {
+				t.Fatalf("expected fs.ErrInvalid, got %v", err)
+			}
+			if uri != "" {
+				t.Fatalf("expected empty uri, got %q", uri)
+			}
+			if called {
+				t.Fatal("handler was registered")
+			}
+		})
+	}
+}
+
 func TestHandleFS_RejectsRootEscape(t *testing.T) {
 	fsys := fstest.MapFS{
 		"assets/public.txt": {Data: []byte("public")},

@@ -2,7 +2,9 @@ package staticserve_test
 
 import (
 	"bytes"
+	"errors"
 	"io"
+	"io/fs"
 	"strings"
 	"testing"
 
@@ -114,6 +116,23 @@ func Test_New_RejectsTruncatedGZipInput(t *testing.T) {
 	}
 	if ss != nil {
 		t.Fatalf("expected nil StaticServe, got %#v", ss)
+	}
+}
+
+func Test_New_RejectsInvalidPath(t *testing.T) {
+	for _, filename := range []string{".", "", "./file.txt", "dir/../file.txt", "dir//file.txt", "dir/./file.txt", "/file.txt"} {
+		t.Run(filename, func(t *testing.T) {
+			ss, err := staticserve.New(filename, nil)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if !errors.Is(err, fs.ErrInvalid) {
+				t.Fatalf("expected fs.ErrInvalid, got %v", err)
+			}
+			if ss != nil {
+				t.Fatalf("expected nil StaticServe, got %#v", ss)
+			}
+		})
 	}
 }
 

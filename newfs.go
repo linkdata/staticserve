@@ -5,16 +5,22 @@ import (
 	"io/fs"
 )
 
-func readFSFile(fsys fs.FS, root, fpath string) (b []byte, err error) {
+func validateAssetPath(fpath string) error {
 	if fpath == "." || !fs.ValidPath(fpath) {
-		return nil, fmt.Errorf("%w: %s", fs.ErrInvalid, fpath)
+		return fmt.Errorf("%w: %s", fs.ErrInvalid, fpath)
 	}
-	if root == "" {
-		root = "."
-	}
-	var sub fs.FS
-	if sub, err = fs.Sub(fsys, root); err == nil {
-		b, err = fs.ReadFile(sub, fpath)
+	return nil
+}
+
+func readFSFile(fsys fs.FS, root, fpath string) (b []byte, err error) {
+	if err = validateAssetPath(fpath); err == nil {
+		if root == "" {
+			root = "."
+		}
+		var sub fs.FS
+		if sub, err = fs.Sub(fsys, root); err == nil {
+			b, err = fs.ReadFile(sub, fpath)
+		}
 	}
 	return
 }

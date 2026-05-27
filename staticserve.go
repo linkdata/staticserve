@@ -28,45 +28,47 @@ type StaticServe struct {
 }
 
 // New returns a StaticServe that serves the given data with a filename like 'filename.12345678.ext'.
+// The filename must be a valid slash-separated relative path, excluding ".".
 // The filename must have the suffix ".gz" if the data is GZip compressed. The ".gz" suffix will
 // not be part of the filename presented in this case.
 func New(filename string, data []byte) (ss *StaticServe, err error) {
-	var gz []byte
-	var size int64
-	// The cache-busting name is derived from a hash of the uncompressed
-	// content, so it stays stable regardless of how the data was compressed
-	// (e.g. across gzip level or Go toolchain changes).
-	h := fnv.New64a()
-	if strings.HasSuffix(filename, ".gz") {
-		gz = append([]byte(nil), data...)
-		filename = strings.TrimSuffix(filename, ".gz")
-		var gzr *gzip.Reader
-		if gzr, err = gzip.NewReader(bytes.NewReader(gz)); err == nil {
-			size, err = io.Copy(h, gzr) // #nosec G110
-			err = errors.Join(err, gzr.Close())
+	if err = validateAssetPath(filename); err == nil {
+		var gz []byte
+		var size int64
+		// The cache-busting name is derived from a hash of the uncompressed
+		// content, so it stays stable regardless of how the data was compressed
+		// (e.g. across gzip level or Go toolchain changes).
+		h := fnv.New64a()
+		if strings.HasSuffix(filename, ".gz") {
+			gz = append([]byte(nil), data...)
+			filename = strings.TrimSuffix(filename, ".gz")
+			var gzr *gzip.Reader
+			if gzr, err = gzip.NewReader(bytes.NewReader(gz)); err == nil {
+				size, err = io.Copy(h, gzr) // #nosec G110
+				err = errors.Join(err, gzr.Close())
+			}
+		} else {
+			size = int64(len(data))
+			_, _ = h.Write(data) // hash.Hash.Write never returns an error
+			var buf bytes.Buffer
+			gzw := gzip.NewWriter(&buf)
+			_, err = gzw.Write(data)
+			if err = errors.Join(err, gzw.Close()); err == nil {
+				gz = buf.Bytes()
+			}
 		}
-	} else {
-		size = int64(len(data))
-		_, _ = h.Write(data) // hash.Hash.Write never returns an error
-		var buf bytes.Buffer
-		gzw := gzip.NewWriter(&buf)
-		_, err = gzw.Write(data)
-		if err = errors.Join(err, gzw.Close()); err == nil {
-			gz = buf.Bytes()
+
+		if err == nil {
+			ext := filepath.Ext(filename)
+			filename = strings.TrimSuffix(filename, ext)
+			ss = &StaticServe{
+				Name:        filename + "." + strconv.FormatUint(h.Sum64(), 36) + ext,
+				ContentType: mime.TypeByExtension(ext),
+				Size:        size,
+				Gz:          gz,
+			}
 		}
 	}
-
-	if err == nil {
-		ext := filepath.Ext(filename)
-		filename = strings.TrimSuffix(filename, ext)
-		ss = &StaticServe{
-			Name:        filename + "." + strconv.FormatUint(h.Sum64(), 36) + ext,
-			ContentType: mime.TypeByExtension(ext),
-			Size:        size,
-			Gz:          gz,
-		}
-	}
-
 	return
 }
 
