@@ -22,8 +22,8 @@ func isMethodChar(c byte) bool {
 func hasMethodPrefix(pattern string) bool {
 	if i := strings.IndexAny(pattern, " \t"); i > 0 {
 		method := pattern[:i]
-		for _, c := range []byte(method) {
-			if !isMethodChar(c) {
+		for j := range method {
+			if !isMethodChar(method[j]) {
 				return false
 			}
 		}
