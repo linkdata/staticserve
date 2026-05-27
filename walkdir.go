@@ -1,7 +1,6 @@
 package staticserve
 
 import (
-	"io"
 	"io/fs"
 	"strings"
 )
@@ -14,16 +13,12 @@ func WalkDir(fsys fs.FS, root string, fn func(filename string, ss *StaticServe) 
 	}
 	err = fs.WalkDir(fsys, root, func(filename string, d fs.DirEntry, err error) error {
 		if err == nil && !d.IsDir() {
-			var f fs.File
-			if f, err = fsys.Open(filename); err == nil {
-				defer f.Close()
-				var b []byte
-				if b, err = io.ReadAll(f); err == nil {
-					var ss *StaticServe
-					filename = strings.TrimPrefix(filename, root+"/")
-					if ss, err = New(filename, b); err == nil {
-						err = fn(filename, ss)
-					}
+			var b []byte
+			if b, err = fs.ReadFile(fsys, filename); err == nil {
+				var ss *StaticServe
+				filename = strings.TrimPrefix(filename, root+"/")
+				if ss, err = New(filename, b); err == nil {
+					err = fn(filename, ss)
 				}
 			}
 		}
