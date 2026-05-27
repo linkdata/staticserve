@@ -138,17 +138,23 @@ import (
         "io/fs"
 )
 
-func readFSFile(fsys fs.FS, root, fpath string) (b []byte, err error) <span class="cov8" title="1">{
+func validateAssetPath(fpath string) error <span class="cov8" title="1">{
         if fpath == "." || !fs.ValidPath(fpath) </span><span class="cov8" title="1">{
-                return nil, fmt.Errorf("%w: %s", fs.ErrInvalid, fpath)
+                return fmt.Errorf("%w: %s", fs.ErrInvalid, fpath)
         }</span>
-        <span class="cov8" title="1">if root == "" </span><span class="cov8" title="1">{
-                root = "."
-        }</span>
-        <span class="cov8" title="1">var sub fs.FS
-        if sub, err = fs.Sub(fsys, root); err == nil </span><span class="cov8" title="1">{
-                b, err = fs.ReadFile(sub, fpath)
-        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+func readFSFile(fsys fs.FS, root, fpath string) (b []byte, err error) <span class="cov8" title="1">{
+        if err = validateAssetPath(fpath); err == nil </span><span class="cov8" title="1">{
+                if root == "" </span><span class="cov8" title="1">{
+                        root = "."
+                }</span>
+                <span class="cov8" title="1">var sub fs.FS
+                if sub, err = fs.Sub(fsys, root); err == nil </span><span class="cov8" title="1">{
+                        b, err = fs.ReadFile(sub, fpath)
+                }</span>
+        }
         <span class="cov8" title="1">return</span>
 }
 
@@ -355,45 +361,47 @@ type StaticServe struct {
 }
 
 // New returns a StaticServe that serves the given data with a filename like 'filename.12345678.ext'.
+// The filename must be a valid slash-separated relative path, excluding ".".
 // The filename must have the suffix ".gz" if the data is GZip compressed. The ".gz" suffix will
 // not be part of the filename presented in this case.
 func New(filename string, data []byte) (ss *StaticServe, err error) <span class="cov8" title="1">{
-        var gz []byte
-        var size int64
-        // The cache-busting name is derived from a hash of the uncompressed
-        // content, so it stays stable regardless of how the data was compressed
-        // (e.g. across gzip level or Go toolchain changes).
-        h := fnv.New64a()
-        if strings.HasSuffix(filename, ".gz") </span><span class="cov8" title="1">{
-                gz = append([]byte(nil), data...)
-                filename = strings.TrimSuffix(filename, ".gz")
-                var gzr *gzip.Reader
-                if gzr, err = gzip.NewReader(bytes.NewReader(gz)); err == nil </span><span class="cov8" title="1">{
-                        size, err = io.Copy(h, gzr) // #nosec G110
-                        err = errors.Join(err, gzr.Close())
-                }</span>
-        } else<span class="cov8" title="1"> {
-                size = int64(len(data))
-                _, _ = h.Write(data) // hash.Hash.Write never returns an error
-                var buf bytes.Buffer
-                gzw := gzip.NewWriter(&amp;buf)
-                _, err = gzw.Write(data)
-                if err = errors.Join(err, gzw.Close()); err == nil </span><span class="cov8" title="1">{
-                        gz = buf.Bytes()
+        if err = validateAssetPath(filename); err == nil </span><span class="cov8" title="1">{
+                var gz []byte
+                var size int64
+                // The cache-busting name is derived from a hash of the uncompressed
+                // content, so it stays stable regardless of how the data was compressed
+                // (e.g. across gzip level or Go toolchain changes).
+                h := fnv.New64a()
+                if strings.HasSuffix(filename, ".gz") </span><span class="cov8" title="1">{
+                        gz = append([]byte(nil), data...)
+                        filename = strings.TrimSuffix(filename, ".gz")
+                        var gzr *gzip.Reader
+                        if gzr, err = gzip.NewReader(bytes.NewReader(gz)); err == nil </span><span class="cov8" title="1">{
+                                size, err = io.Copy(h, gzr) // #nosec G110
+                                err = errors.Join(err, gzr.Close())
+                        }</span>
+                } else<span class="cov8" title="1"> {
+                        size = int64(len(data))
+                        _, _ = h.Write(data) // hash.Hash.Write never returns an error
+                        var buf bytes.Buffer
+                        gzw := gzip.NewWriter(&amp;buf)
+                        _, err = gzw.Write(data)
+                        if err = errors.Join(err, gzw.Close()); err == nil </span><span class="cov8" title="1">{
+                                gz = buf.Bytes()
+                        }</span>
+                }
+
+                <span class="cov8" title="1">if err == nil </span><span class="cov8" title="1">{
+                        ext := filepath.Ext(filename)
+                        filename = strings.TrimSuffix(filename, ext)
+                        ss = &amp;StaticServe{
+                                Name:        filename + "." + strconv.FormatUint(h.Sum64(), 36) + ext,
+                                ContentType: mime.TypeByExtension(ext),
+                                Size:        size,
+                                Gz:          gz,
+                        }
                 }</span>
         }
-
-        <span class="cov8" title="1">if err == nil </span><span class="cov8" title="1">{
-                ext := filepath.Ext(filename)
-                filename = strings.TrimSuffix(filename, ext)
-                ss = &amp;StaticServe{
-                        Name:        filename + "." + strconv.FormatUint(h.Sum64(), 36) + ext,
-                        ContentType: mime.TypeByExtension(ext),
-                        Size:        size,
-                        Gz:          gz,
-                }
-        }</span>
-
         <span class="cov8" title="1">return</span>
 }
 
