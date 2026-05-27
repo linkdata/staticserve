@@ -57,9 +57,11 @@ func acceptsGzip(hdr http.Header) bool {
 // by an equivalent GET, so HEAD responses are usable for size discovery.
 //
 // Methods other than GET and HEAD receive 405 Method Not Allowed with an
-// Allow header. If the stored gzip stream cannot be opened (which should not
-// happen for instances created via [New]), 500 Internal Server Error is
-// returned with no body.
+// Allow header. When the asset must be decompressed (the client does not
+// accept gzip) and the stored gzip stream cannot be opened, 500 Internal
+// Server Error is returned with no body; this should not happen for instances
+// created via [New]. Clients that accept gzip receive the stored bytes
+// verbatim and are never served a 500.
 func (ss *StaticServe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var body io.Reader
 	statusCode := http.StatusMethodNotAllowed
