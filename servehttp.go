@@ -34,7 +34,7 @@ func acceptsGzip(hdr http.Header) bool {
 	for _, value := range hdr.Values("Accept-Encoding") {
 		for encoding := range strings.SplitSeq(value, ",") {
 			coding, params, err := mime.ParseMediaType(encoding)
-			if err != nil || !strings.EqualFold(coding, "gzip") {
+			if err != nil || coding != "gzip" {
 				continue
 			}
 			if q, ok := params["q"]; ok {
