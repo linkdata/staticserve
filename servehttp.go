@@ -13,13 +13,19 @@ import (
 // HeaderCacheControl is the Cache-Control header value sent with successful
 // responses. Its default marks the asset as immutable for one year, which is
 // safe because the served file name is cache-busted via a content hash.
+//
+// To customize it, reassign it before serving any request. It is shared by
+// reference across all responses and read without synchronization, so mutating
+// it (or its elements) while requests are in flight is a data race.
 var HeaderCacheControl = []string{"public, max-age=31536000, s-maxage=31536000, immutable"}
 
 // HeaderVary is the Vary header value sent with successful responses.
+// Like [HeaderCacheControl], reassign it before serving rather than mutating it in place.
 var HeaderVary = []string{"Accept-Encoding"}
 
 // HeaderAllow is the Allow header value sent with 405 Method Not Allowed
 // responses to requests that use methods other than GET or HEAD.
+// Like [HeaderCacheControl], reassign it before serving rather than mutating it in place.
 var HeaderAllow = []string{http.MethodGet + ", " + http.MethodHead}
 
 var headerContentEncoding = []string{"gzip"}
