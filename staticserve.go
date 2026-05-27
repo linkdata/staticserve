@@ -33,16 +33,21 @@ type StaticServe struct {
 func New(filename string, data []byte) (ss *StaticServe, err error) {
 	var gz []byte
 	var size int64
+	// The cache-busting name is derived from a hash of the uncompressed
+	// content, so it stays stable regardless of how the data was compressed
+	// (e.g. across gzip level or Go toolchain changes).
+	h := fnv.New64a()
 	if strings.HasSuffix(filename, ".gz") {
 		gz = append([]byte(nil), data...)
 		filename = strings.TrimSuffix(filename, ".gz")
 		var gzr *gzip.Reader
 		if gzr, err = gzip.NewReader(bytes.NewReader(gz)); err == nil {
-			size, err = io.Copy(io.Discard, gzr) // #nosec G110
+			size, err = io.Copy(h, gzr) // #nosec G110
 			err = errors.Join(err, gzr.Close())
 		}
 	} else {
 		size = int64(len(data))
+		_, _ = h.Write(data) // hash.Hash.Write never returns an error
 		var buf bytes.Buffer
 		gzw := gzip.NewWriter(&buf)
 		_, err = gzw.Write(data)
@@ -54,14 +59,11 @@ func New(filename string, data []byte) (ss *StaticServe, err error) {
 	if err == nil {
 		ext := filepath.Ext(filename)
 		filename = strings.TrimSuffix(filename, ext)
-		h := fnv.New64a()
-		if _, err = h.Write(gz); err == nil {
-			ss = &StaticServe{
-				Name:        filename + "." + strconv.FormatUint(h.Sum64(), 36) + ext,
-				ContentType: mime.TypeByExtension(ext),
-				Size:        size,
-				Gz:          gz,
-			}
+		ss = &StaticServe{
+			Name:        filename + "." + strconv.FormatUint(h.Sum64(), 36) + ext,
+			ContentType: mime.TypeByExtension(ext),
+			Size:        size,
+			Gz:          gz,
 		}
 	}
 
