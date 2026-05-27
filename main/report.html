@@ -161,6 +161,8 @@ func NewFS(fsys fs.FS, root, fpath string) (ss *StaticServe, err error) <span cl
         <span class="cov8" title="1">return</span>
 }
 
+// MustNewFS calls [NewFS] for each fpath relative to root and returns the
+// resulting StaticServe values in order. It panics on the first error.
 func MustNewFS(fsys fs.FS, root string, fpaths ...string) (ssl []*StaticServe) <span class="cov8" title="1">{
         for _, fpath := range fpaths </span><span class="cov8" title="1">{
                 ss, err := NewFS(fsys, root, fpath)
@@ -238,8 +240,18 @@ import (
         "strings"
 )
 
+// HeaderCacheControl is the Cache-Control header value sent with successful
+// responses. Its default marks the asset as immutable for one year, which is
+// safe because the served file name is cache-busted via a content hash.
 var HeaderCacheControl = []string{"public, max-age=31536000, s-maxage=31536000, immutable"}
+
+// HeaderVary is the Vary header value sent with successful responses.
 var HeaderVary = []string{"Accept-Encoding"}
+
+// HeaderAllow is the Allow header value sent with 405 Method Not Allowed
+// responses to requests that use methods other than GET or HEAD.
+var HeaderAllow = []string{http.MethodGet + ", " + http.MethodHead}
+
 var headerContentEncoding = []string{"gzip"}
 
 func acceptsGzip(hdr http.Header) bool <span class="cov8" title="1">{
@@ -261,6 +273,17 @@ func acceptsGzip(hdr http.Header) bool <span class="cov8" title="1">{
         <span class="cov8" title="1">return false</span>
 }
 
+// ServeHTTP serves the asset for GET and HEAD requests.
+//
+// When the client advertises Accept-Encoding: gzip the gzip-compressed bytes
+// are served verbatim; otherwise the asset is decompressed on the fly.
+// Content-Length always reflects the size of the body that would be returned
+// by an equivalent GET, so HEAD responses are usable for size discovery.
+//
+// Methods other than GET and HEAD receive 405 Method Not Allowed with an
+// Allow header. If the stored gzip stream cannot be opened (which should not
+// happen for instances created via [New]), 500 Internal Server Error is
+// returned with no body.
 func (ss *StaticServe) ServeHTTP(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
         var body io.Reader
         statusCode := http.StatusMethodNotAllowed
@@ -273,9 +296,10 @@ func (ss *StaticServe) ServeHTTP(w http.ResponseWriter, r *http.Request) <span c
                 }</span> else<span class="cov8" title="1"> {
                         statusCode = http.StatusInternalServerError
                         if gzr, err := gzip.NewReader(bytes.NewReader(ss.Gz)); err == nil </span><span class="cov8" title="1">{
-                                defer gzr.Close()
-                                body = gzr
-                        }</span>
+                                defer func() </span><span class="cov8" title="1">{ _ = gzr.Close() }</span>()
+                                <span class="cov8" title="1">body = gzr
+                                hdr["Content-Length"] = []string{strconv.FormatInt(ss.Size, 10)}</span>
+                        }
                 }
                 <span class="cov8" title="1">if body != nil </span><span class="cov8" title="1">{
                         statusCode = http.StatusOK
@@ -285,7 +309,9 @@ func (ss *StaticServe) ServeHTTP(w http.ResponseWriter, r *http.Request) <span c
                                 hdr["Content-Type"] = []string{ss.ContentType}
                         }</span>
                 }
-        }
+        } else<span class="cov8" title="1"> {
+                w.Header()["Allow"] = HeaderAllow
+        }</span>
         <span class="cov8" title="1">w.WriteHeader(statusCode)
         if body != nil &amp;&amp; r.Method != http.MethodHead </span><span class="cov8" title="1">{
                 _, _ = io.Copy(w, body)
@@ -300,15 +326,25 @@ import (
         "compress/gzip"
         "errors"
         "hash/fnv"
+        "io"
         "mime"
         "path/filepath"
         "strconv"
         "strings"
 )
 
+// StaticServe is an http.Handler that serves a single asset under a
+// cache-busted file name. The asset is held gzip-compressed in memory and
+// served either as gzip (when the client advertises Accept-Encoding: gzip)
+// or decompressed on the fly otherwise.
+//
+// Instances are safe for concurrent use after construction and are intended
+// to be created via [New], [NewFS], [Must], or [MustNewFS] so that all fields
+// are populated consistently.
 type StaticServe struct {
         Name        string // the cache-busting file name, e.g. "static/filename.1234567.js"
         ContentType string // Content-Type of the file, e.g. "application/javascript"
+        Size        int64  // uncompressed length of the asset in bytes
         Gz          []byte // gzipped data, will be unpacked as needed
 }
 
@@ -317,10 +353,22 @@ type StaticServe struct {
 // not be part of the filename presented in this case.
 func New(filename string, data []byte) (ss *StaticServe, err error) <span class="cov8" title="1">{
         var gz []byte
+        var size int64
+        // The cache-busting name is derived from a hash of the uncompressed
+        // content, so it stays stable regardless of how the data was compressed
+        // (e.g. across gzip level or Go toolchain changes).
+        h := fnv.New64a()
         if strings.HasSuffix(filename, ".gz") </span><span class="cov8" title="1">{
-                gz = data
+                gz = append([]byte(nil), data...)
                 filename = strings.TrimSuffix(filename, ".gz")
-        }</span> else<span class="cov8" title="1"> {
+                var gzr *gzip.Reader
+                if gzr, err = gzip.NewReader(bytes.NewReader(gz)); err == nil </span><span class="cov8" title="1">{
+                        size, err = io.Copy(h, gzr) // #nosec G110
+                        err = errors.Join(err, gzr.Close())
+                }</span>
+        } else<span class="cov8" title="1"> {
+                size = int64(len(data))
+                _, _ = h.Write(data) // hash.Hash.Write never returns an error
                 var buf bytes.Buffer
                 gzw := gzip.NewWriter(&amp;buf)
                 _, err = gzw.Write(data)
@@ -332,19 +380,19 @@ func New(filename string, data []byte) (ss *StaticServe, err error) <span class=
         <span class="cov8" title="1">if err == nil </span><span class="cov8" title="1">{
                 ext := filepath.Ext(filename)
                 filename = strings.TrimSuffix(filename, ext)
-                h := fnv.New64a()
-                if _, err = h.Write(gz); err == nil </span><span class="cov8" title="1">{
-                        ss = &amp;StaticServe{
-                                Name:        filename + "." + strconv.FormatUint(h.Sum64(), 36) + ext,
-                                ContentType: mime.TypeByExtension(ext),
-                                Gz:          gz,
-                        }
-                }</span>
-        }
+                ss = &amp;StaticServe{
+                        Name:        filename + "." + strconv.FormatUint(h.Sum64(), 36) + ext,
+                        ContentType: mime.TypeByExtension(ext),
+                        Size:        size,
+                        Gz:          gz,
+                }
+        }</span>
 
         <span class="cov8" title="1">return</span>
 }
 
+// MaybePanic panics if err is non-nil. It is used by [Must] and [MustNewFS]
+// to convert initialization errors into panics.
 func MaybePanic(err error) <span class="cov8" title="1">{
         if err != nil </span><span class="cov8" title="1">{
                 panic(err)</span>
@@ -363,7 +411,6 @@ func Must(filename string, data []byte) (ss *StaticServe) <span class="cov8" tit
 		<pre class="file" id="file5" style="display: none">package staticserve
 
 import (
-        "io"
         "io/fs"
         "strings"
 )
@@ -371,19 +418,18 @@ import (
 // WalkDir walks the file tree rooted at root, calling fn for each file in the tree with
 // the filename having root trimmed (e.g. "root/dir/file.ext" becomes "dir/file.ext").
 func WalkDir(fsys fs.FS, root string, fn func(filename string, ss *StaticServe) (err error)) (err error) <span class="cov8" title="1">{
-        err = fs.WalkDir(fsys, root, func(filename string, d fs.DirEntry, err error) error </span><span class="cov8" title="1">{
+        if root == "" </span><span class="cov8" title="1">{
+                root = "."
+        }</span>
+        <span class="cov8" title="1">err = fs.WalkDir(fsys, root, func(filename string, d fs.DirEntry, err error) error </span><span class="cov8" title="1">{
                 if err == nil &amp;&amp; !d.IsDir() </span><span class="cov8" title="1">{
-                        var f fs.File
-                        if f, err = fsys.Open(filename); err == nil </span><span class="cov8" title="1">{
-                                defer f.Close()
-                                var b []byte
-                                if b, err = io.ReadAll(f); err == nil </span><span class="cov8" title="1">{
-                                        var ss *StaticServe
-                                        filename = strings.TrimPrefix(strings.TrimPrefix(filename, root), "/")
-                                        if ss, err = New(filename, b); err == nil </span><span class="cov8" title="1">{
-                                                err = fn(filename, ss)
-                                        }</span>
-                                }
+                        var b []byte
+                        if b, err = fs.ReadFile(fsys, filename); err == nil </span><span class="cov8" title="1">{
+                                var ss *StaticServe
+                                filename = strings.TrimPrefix(filename, root+"/")
+                                if ss, err = New(filename, b); err == nil </span><span class="cov8" title="1">{
+                                        err = fn(filename, ss)
+                                }</span>
                         }
                 }
                 <span class="cov8" title="1">return err</span>
