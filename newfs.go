@@ -3,17 +3,22 @@ package staticserve
 import (
 	"fmt"
 	"io/fs"
+	"strings"
 )
 
-func validateAssetPath(fpath string) error {
+func validateRelativeAssetPath(fpath string) error {
 	if fpath == "." || !fs.ValidPath(fpath) {
 		return fmt.Errorf("%w: %s", fs.ErrInvalid, fpath)
 	}
 	return nil
 }
 
+func validateAssetName(name string) error {
+	return validateRelativeAssetPath(strings.TrimPrefix(name, "/"))
+}
+
 func readFSFile(fsys fs.FS, root, fpath string) (b []byte, err error) {
-	if err = validateAssetPath(fpath); err == nil {
+	if err = validateRelativeAssetPath(fpath); err == nil {
 		if root == "" {
 			root = "."
 		}

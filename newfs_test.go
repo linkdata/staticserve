@@ -48,6 +48,22 @@ func TestNewFS_RejectsRootEscape(t *testing.T) {
 	}
 }
 
+func TestNewFS_RejectsAbsolutePath(t *testing.T) {
+	fsys := fstest.MapFS{
+		"assets/public.txt": {Data: []byte("public")},
+	}
+	ss, err := staticserve.NewFS(fsys, "assets", "/public.txt")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !errors.Is(err, fs.ErrInvalid) {
+		t.Fatalf("expected fs.ErrInvalid, got %v", err)
+	}
+	if ss != nil {
+		t.Fatalf("expected nil StaticServe, got %#v", ss)
+	}
+}
+
 func TestNewFS_RejectsInvalidRoot(t *testing.T) {
 	fsys := fstest.MapFS{
 		"assets/public.txt": {Data: []byte("public")},

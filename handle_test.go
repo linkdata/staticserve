@@ -28,6 +28,27 @@ func TestHandle_Pattern(t *testing.T) {
 	}
 }
 
+func TestHandle_AllowsAbsolutePathName(t *testing.T) {
+	mux := http.NewServeMux()
+	uri, err := staticserve.Handle("/jaws/.jaws.css", []byte("abc"), mux.Handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(uri, "/jaws/.jaws.") {
+		t.Fatalf("expected absolute cache-busted uri under /jaws, got %q", uri)
+	}
+	if !strings.HasSuffix(uri, ".css") {
+		t.Fatalf("expected .css suffix, got %q", uri)
+	}
+
+	rq := httptest.NewRequest(http.MethodGet, uri, nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, rq)
+	if sc := rr.Result().StatusCode; sc != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, sc)
+	}
+}
+
 func TestHandle_EscapesSpecialFilenameURI(t *testing.T) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -84,7 +105,7 @@ func TestHandle_DoesNotRegisterWildcardRoute(t *testing.T) {
 }
 
 func TestHandle_RejectsInvalidPath(t *testing.T) {
-	for _, fpath := range []string{".", "./file.txt", "dir/../file.txt", "dir//file.txt", "dir/./file.txt", "/file.txt"} {
+	for _, fpath := range []string{".", "/", "./file.txt", "dir/../file.txt", "dir//file.txt", "dir/./file.txt", "/dir/../file.txt", "/dir//file.txt", "/dir/./file.txt"} {
 		t.Run(fpath, func(t *testing.T) {
 			called := false
 			uri, err := staticserve.Handle(fpath, []byte("abc"), func(string, http.Handler) {

@@ -21,18 +21,19 @@ import (
 // to be created via [New], [NewFS], [Must], or [MustNewFS] so that all fields
 // are populated consistently.
 type StaticServe struct {
-	Name        string // the cache-busting file name, e.g. "static/filename.1234567.js"
+	Name        string // the cache-busting file name, e.g. "static/filename.1234567.js" or "/static/filename.1234567.js"
 	ContentType string // Content-Type of the file, e.g. "application/javascript"
 	Size        int64  // uncompressed length of the asset in bytes
 	Gz          []byte // gzipped data, will be unpacked as needed
 }
 
 // New returns a StaticServe that serves the given data with a filename like 'filename.12345678.ext'.
-// The filename must be a valid slash-separated relative path, excluding ".".
+// The filename must be a valid slash-separated relative path, or the same path
+// with a leading slash, excluding "." and "/".
 // The filename must have the suffix ".gz" if the data is GZip compressed. The ".gz" suffix will
 // not be part of the filename presented in this case.
 func New(filename string, data []byte) (ss *StaticServe, err error) {
-	if err = validateAssetPath(filename); err == nil {
+	if err = validateAssetName(filename); err == nil {
 		var gz []byte
 		var size int64
 		// The cache-busting name is derived from a hash of the uncompressed

@@ -55,6 +55,19 @@ func Test_New(t *testing.T) {
 	}
 }
 
+func Test_New_AllowsAbsolutePathName(t *testing.T) {
+	ss, err := staticserve.New("/jaws/.jaws.css", []byte(someJavascript))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(ss.Name, "/jaws/.jaws.") {
+		t.Fatalf("expected absolute cache-busted name under /jaws, got %q", ss.Name)
+	}
+	if !strings.HasSuffix(ss.Name, ".css") {
+		t.Fatalf("expected .css suffix, got %q", ss.Name)
+	}
+}
+
 func Test_New_PopulatesSize(t *testing.T) {
 	data := []byte(someJavascript)
 	ss, err := staticserve.New("test.js", data)
@@ -120,7 +133,7 @@ func Test_New_RejectsTruncatedGZipInput(t *testing.T) {
 }
 
 func Test_New_RejectsInvalidPath(t *testing.T) {
-	for _, filename := range []string{".", "", "./file.txt", "dir/../file.txt", "dir//file.txt", "dir/./file.txt", "/file.txt"} {
+	for _, filename := range []string{".", "", "/", "./file.txt", "dir/../file.txt", "dir//file.txt", "dir/./file.txt", "/dir/../file.txt", "/dir//file.txt", "/dir/./file.txt"} {
 		t.Run(filename, func(t *testing.T) {
 			ss, err := staticserve.New(filename, nil)
 			if err == nil {
