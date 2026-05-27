@@ -66,7 +66,7 @@ func (ss *StaticServe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		} else {
 			statusCode = http.StatusInternalServerError
 			if gzr, err := gzip.NewReader(bytes.NewReader(ss.Gz)); err == nil {
-				defer gzr.Close()
+				defer func() { _ = gzr.Close() }()
 				body = gzr
 				hdr["Content-Length"] = []string{strconv.FormatInt(ss.Size, 10)}
 			}
