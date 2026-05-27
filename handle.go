@@ -13,6 +13,11 @@ import (
 // Handle and HandleFS pass method-aware patterns. Bare path patterns are normalized to GET.
 type HandleFunc = func(uri string, handler http.Handler)
 
+// escapeURIPath turns a slash-separated asset path into an absolute URI path
+// with each segment percent-escaped. Segments are escaped individually with
+// url.PathEscape (which escapes "/" and pattern-significant characters like
+// '{') before url.JoinPath joins them under "/"; JoinPath only cleans and
+// rejoins already-escaped segments, so this does not double-escape.
 func escapeURIPath(fpath string) (string, error) {
 	var parts []string
 	for part := range strings.SplitSeq(fpath, "/") {
