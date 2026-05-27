@@ -24,7 +24,6 @@ type expectedStaticAsset struct {
 	contentType string
 	plain       []byte
 	gz          []byte
-	ss          *staticserve.StaticServe
 }
 
 func readGzip(t *testing.T, b []byte) []byte {
@@ -91,7 +90,6 @@ func expectedStaticAssets(t *testing.T, fsys fs.FS, root, uriPrefix string, file
 			contentType: ss.ContentType,
 			plain:       plain,
 			gz:          ss.Gz,
-			ss:          ss,
 		})
 	}
 	return
