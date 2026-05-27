@@ -94,6 +94,11 @@ import (
 // Handle and HandleFS pass method-aware patterns. Bare path patterns are normalized to GET.
 type HandleFunc = func(uri string, handler http.Handler)
 
+// escapeURIPath turns a slash-separated asset path into an absolute URI path
+// with each segment percent-escaped. Segments are escaped individually with
+// url.PathEscape (which escapes "/" and pattern-significant characters like
+// '{') before url.JoinPath joins them under "/"; JoinPath only cleans and
+// rejoins already-escaped segments, so this does not double-escape.
 func escapeURIPath(fpath string) (string, error) <span class="cov8" title="1">{
         var parts []string
         for part := range strings.SplitSeq(fpath, "/") </span><span class="cov8" title="1">{
@@ -203,8 +208,8 @@ func isMethodChar(c byte) bool <span class="cov8" title="1">{
 func hasMethodPrefix(pattern string) bool <span class="cov8" title="1">{
         if i := strings.IndexAny(pattern, " \t"); i &gt; 0 </span><span class="cov8" title="1">{
                 method := pattern[:i]
-                for _, c := range []byte(method) </span><span class="cov8" title="1">{
-                        if !isMethodChar(c) </span><span class="cov8" title="1">{
+                for j := range method </span><span class="cov8" title="1">{
+                        if !isMethodChar(method[j]) </span><span class="cov8" title="1">{
                                 return false
                         }</span>
                 }
@@ -270,7 +275,7 @@ func acceptsGzip(hdr http.Header) bool <span class="cov8" title="1">{
         for _, value := range hdr.Values("Accept-Encoding") </span><span class="cov8" title="1">{
                 for encoding := range strings.SplitSeq(value, ",") </span><span class="cov8" title="1">{
                         coding, params, err := mime.ParseMediaType(encoding)
-                        if err != nil || !strings.EqualFold(coding, "gzip") </span><span class="cov8" title="1">{
+                        if err != nil || coding != "gzip" </span><span class="cov8" title="1">{
                                 continue</span>
                         }
                         <span class="cov8" title="1">if q, ok := params["q"]; ok </span><span class="cov8" title="1">{
@@ -293,9 +298,11 @@ func acceptsGzip(hdr http.Header) bool <span class="cov8" title="1">{
 // by an equivalent GET, so HEAD responses are usable for size discovery.
 //
 // Methods other than GET and HEAD receive 405 Method Not Allowed with an
-// Allow header. If the stored gzip stream cannot be opened (which should not
-// happen for instances created via [New]), 500 Internal Server Error is
-// returned with no body.
+// Allow header. When the asset must be decompressed (the client does not
+// accept gzip) and the stored gzip stream cannot be opened, 500 Internal
+// Server Error is returned with no body; this should not happen for instances
+// created via [New]. Clients that accept gzip receive the stored bytes
+// verbatim and are never served a 500.
 func (ss *StaticServe) ServeHTTP(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
         var body io.Reader
         statusCode := http.StatusMethodNotAllowed
