@@ -6,7 +6,7 @@
 # staticserve
 
 `staticserve` is a cache-busting HTTP handler for static files. It supports
-GET operations requesting the file with no encoding or gzip encoding.
+GET and HEAD operations requesting the file with no encoding or gzip encoding.
 
 ## Example
 
