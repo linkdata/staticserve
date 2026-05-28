@@ -40,6 +40,10 @@ func Handle(fpath string, data []byte, handleFn HandleFunc) (uri string, err err
 // HandleFS creates StaticServe handlers for the filepaths given.
 // Returns the URI(s) of the resources. If an error occurs, the URI
 // of the failed resource will be the empty string.
+//
+// HandleFS attempts every filepath and registers each resource as it succeeds.
+// A non-nil error can therefore be returned alongside routes registered for
+// any successful filepaths.
 func HandleFS(fsys fs.FS, handleFn HandleFunc, root string, filepaths ...string) (uris []string, err error) {
 	for _, fpath := range filepaths {
 		var uri string
