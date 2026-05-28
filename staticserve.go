@@ -1,3 +1,8 @@
+// Package staticserve serves single static assets under cache-busted file
+// names. Each asset is held gzip-compressed in memory and served either as
+// gzip (when the client advertises Accept-Encoding: gzip) or decompressed on
+// the fly otherwise. The cache-busting name is derived from a hash of the
+// uncompressed content, so it stays stable across gzip encoder differences.
 package staticserve
 
 import (
@@ -19,7 +24,9 @@ import (
 //
 // Instances are safe for concurrent use after construction and are intended
 // to be created via [New], [NewFS], [Must], or [MustNewFS] so that all fields
-// are populated consistently.
+// are populated consistently. The exported fields should be treated as
+// read-only after construction; mutating them while requests are in flight
+// is a data race.
 type StaticServe struct {
 	Name        string // the cache-busting file name, e.g. "static/filename.1234567.js" or "/static/filename.1234567.js"
 	ContentType string // Content-Type of the file, e.g. "application/javascript"
