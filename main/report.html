@@ -90,8 +90,6 @@ import (
 )
 
 // HandleFunc matches the signature of http.ServeMux.Handle().
-//
-// Handle and HandleFS pass method-aware patterns. Bare path patterns are normalized to GET.
 type HandleFunc = func(uri string, handler http.Handler)
 
 // escapeURIPath turns a slash-separated asset path into an absolute URI path
@@ -108,7 +106,8 @@ func escapeURIPath(fpath string) (string, error) <span class="cov8" title="1">{
 }
 
 // Handle creates a new StaticServe for the fpath that returns the data given.
-// Returns the URI of the resource.
+// Returns the URI of the resource. The pattern passed to handleFn is
+// method-aware: bare path patterns are normalized to GET via [NormalizeGET].
 func Handle(fpath string, data []byte, handleFn HandleFunc) (uri string, err error) <span class="cov8" title="1">{
         var ss *StaticServe
         if ss, err = New(fpath, data); err == nil </span><span class="cov8" title="1">{
@@ -123,11 +122,11 @@ func Handle(fpath string, data []byte, handleFn HandleFunc) (uri string, err err
 // Returns the URI(s) of the resources. If an error occurs, the URI
 // of the failed resource will be the empty string.
 func HandleFS(fsys fs.FS, handleFn HandleFunc, root string, filepaths ...string) (uris []string, err error) <span class="cov8" title="1">{
-        for _, filepath := range filepaths </span><span class="cov8" title="1">{
+        for _, fpath := range filepaths </span><span class="cov8" title="1">{
                 var uri string
-                b, ferr := readFSFile(fsys, root, filepath)
+                b, ferr := readFSFile(fsys, root, fpath)
                 if ferr == nil </span><span class="cov8" title="1">{
-                        uri, ferr = Handle(filepath, b, handleFn)
+                        uri, ferr = Handle(fpath, b, handleFn)
                 }</span>
                 <span class="cov8" title="1">uris = append(uris, uri)
                 err = errors.Join(err, ferr)</span>
@@ -180,6 +179,7 @@ func NewFS(fsys fs.FS, root, fpath string) (ss *StaticServe, err error) <span cl
 // MustNewFS calls [NewFS] for each fpath relative to root and returns the
 // resulting StaticServe values in order. It panics on the first error.
 func MustNewFS(fsys fs.FS, root string, fpaths ...string) (ssl []*StaticServe) <span class="cov8" title="1">{
+        ssl = make([]*StaticServe, 0, len(fpaths))
         for _, fpath := range fpaths </span><span class="cov8" title="1">{
                 ss, err := NewFS(fsys, root, fpath)
                 maybePanic(err)
@@ -343,7 +343,12 @@ func (ss *StaticServe) ServeHTTP(w http.ResponseWriter, r *http.Request) <span c
 }
 </pre>
 		
-		<pre class="file" id="file4" style="display: none">package staticserve
+		<pre class="file" id="file4" style="display: none">// Package staticserve serves single static assets under cache-busted file
+// names. Each asset is held gzip-compressed in memory and served either as
+// gzip (when the client advertises Accept-Encoding: gzip) or decompressed on
+// the fly otherwise. The cache-busting name is derived from a hash of the
+// uncompressed content, so it stays stable across gzip encoder differences.
+package staticserve
 
 import (
         "bytes"
@@ -364,7 +369,9 @@ import (
 //
 // Instances are safe for concurrent use after construction and are intended
 // to be created via [New], [NewFS], [Must], or [MustNewFS] so that all fields
-// are populated consistently.
+// are populated consistently. The exported fields should be treated as
+// read-only after construction; mutating them while requests are in flight
+// is a data race.
 type StaticServe struct {
         Name        string // the cache-busting file name, e.g. "static/filename.1234567.js" or "/static/filename.1234567.js"
         ContentType string // Content-Type of the file, e.g. "application/javascript"
