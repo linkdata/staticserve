@@ -193,6 +193,7 @@ func Test_ServeHTTP_AcceptEncodingParsing(t *testing.T) {
 		{name: "case insensitive", headers: []string{"GZip"}, wantEncoding: "gzip"},
 		{name: "multiple values", headers: []string{"br", "gzip"}, wantEncoding: "gzip"},
 		{name: "q zero", headers: []string{"gzip;q=0"}, wantBodyPlain: true},
+		{name: "q zero.zero", headers: []string{"gzip;q=0.0"}, wantBodyPlain: true},
 		{name: "q zero after br", headers: []string{"br, gzip;q=0"}, wantBodyPlain: true},
 		{name: "substring", headers: []string{"xgzip"}, wantBodyPlain: true},
 		{name: "identity", headers: []string{"identity"}, wantBodyPlain: true},
