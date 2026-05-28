@@ -182,7 +182,7 @@ func NewFS(fsys fs.FS, root, fpath string) (ss *StaticServe, err error) <span cl
 func MustNewFS(fsys fs.FS, root string, fpaths ...string) (ssl []*StaticServe) <span class="cov8" title="1">{
         for _, fpath := range fpaths </span><span class="cov8" title="1">{
                 ss, err := NewFS(fsys, root, fpath)
-                MaybePanic(err)
+                maybePanic(err)
                 ssl = append(ssl, ss)
         }</span>
         <span class="cov8" title="1">return</span>
@@ -418,9 +418,9 @@ func New(filename string, data []byte) (ss *StaticServe, err error) <span class=
         <span class="cov8" title="1">return</span>
 }
 
-// MaybePanic panics if err is non-nil. It is used by [Must] and [MustNewFS]
+// maybePanic panics if err is non-nil. It is used by [Must] and [MustNewFS]
 // to convert initialization errors into panics.
-func MaybePanic(err error) <span class="cov8" title="1">{
+func maybePanic(err error) <span class="cov8" title="1">{
         if err != nil </span><span class="cov8" title="1">{
                 panic(err)</span>
         }
@@ -430,7 +430,7 @@ func MaybePanic(err error) <span class="cov8" title="1">{
 func Must(filename string, data []byte) (ss *StaticServe) <span class="cov8" title="1">{
         var err error
         ss, err = New(filename, data)
-        MaybePanic(err)
+        maybePanic(err)
         return
 }</span>
 </pre>
