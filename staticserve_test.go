@@ -3,7 +3,6 @@ package staticserve_test
 import (
 	"bytes"
 	"errors"
-	"io"
 	"io/fs"
 	"strings"
 	"testing"
@@ -156,12 +155,20 @@ func Test_Must(t *testing.T) {
 	}
 }
 
-func Test_MaybePanic(t *testing.T) {
+func Test_Must_PanicsOnError(t *testing.T) {
 	defer func() {
-		if recover() == nil {
-			t.Fail()
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic")
+		}
+		err, ok := r.(error)
+		if !ok {
+			t.Fatalf("expected error panic, got %T", r)
+		}
+		if !errors.Is(err, fs.ErrInvalid) {
+			t.Fatalf("expected fs.ErrInvalid, got %v", err)
 		}
 	}()
-	staticserve.MaybePanic(io.EOF)
-	t.Fail()
+	staticserve.Must("/", nil)
+	t.Fatal("expected panic")
 }

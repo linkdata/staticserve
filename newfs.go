@@ -44,7 +44,7 @@ func NewFS(fsys fs.FS, root, fpath string) (ss *StaticServe, err error) {
 func MustNewFS(fsys fs.FS, root string, fpaths ...string) (ssl []*StaticServe) {
 	for _, fpath := range fpaths {
 		ss, err := NewFS(fsys, root, fpath)
-		MaybePanic(err)
+		maybePanic(err)
 		ssl = append(ssl, ss)
 	}
 	return

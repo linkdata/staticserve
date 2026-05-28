@@ -73,9 +73,9 @@ func New(filename string, data []byte) (ss *StaticServe, err error) {
 	return
 }
 
-// MaybePanic panics if err is non-nil. It is used by [Must] and [MustNewFS]
+// maybePanic panics if err is non-nil. It is used by [Must] and [MustNewFS]
 // to convert initialization errors into panics.
-func MaybePanic(err error) {
+func maybePanic(err error) {
 	if err != nil {
 		panic(err)
 	}
@@ -85,6 +85,6 @@ func MaybePanic(err error) {
 func Must(filename string, data []byte) (ss *StaticServe) {
 	var err error
 	ss, err = New(filename, data)
-	MaybePanic(err)
+	maybePanic(err)
 	return
 }
