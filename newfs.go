@@ -42,6 +42,7 @@ func NewFS(fsys fs.FS, root, fpath string) (ss *StaticServe, err error) {
 // MustNewFS calls [NewFS] for each fpath relative to root and returns the
 // resulting StaticServe values in order. It panics on the first error.
 func MustNewFS(fsys fs.FS, root string, fpaths ...string) (ssl []*StaticServe) {
+	ssl = make([]*StaticServe, 0, len(fpaths))
 	for _, fpath := range fpaths {
 		ss, err := NewFS(fsys, root, fpath)
 		maybePanic(err)
